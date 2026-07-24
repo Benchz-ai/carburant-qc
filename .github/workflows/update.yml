@@ -1,0 +1,37 @@
+name: Mise à jour quotidienne des prix
+
+on:
+  schedule:
+    # 10h00 UTC = 6h00 (heure d'été du Québec, UTC-4) — ajuste si besoin.
+    - cron: "0 10 * * *"
+  workflow_dispatch: {}  # permet aussi de lancer manuellement depuis l'onglet Actions
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Récupérer les données du jour
+        run: python3 fetch_stations.py
+
+      - name: Commit et push si les données ont changé
+        run: |
+          git config user.name "carburant-bot"
+          git config user.email "carburant-bot@users.noreply.github.com"
+          git add docs/stations.json
+          if git diff --cached --quiet; then
+            echo "Aucun changement, rien à commiter."
+          else
+            git commit -m "Mise à jour des prix ($(date -u +%Y-%m-%d))"
+            git push
+          fi

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prix du carburant — Québec</title>
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#0f1b2b"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Carburant QC"/>
+<link rel="apple-touch-icon" href="icon-180.png"/>
+<link rel="icon" href="icon-192.png"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<style>
+  :root{
+    --ink:#0f1b2b;
+    --paper:#eef2ee;
+    --panel:#132437;
+    --panel-2:#1b3049;
+    --line:rgba(255,255,255,0.09);
+    --accent:#ffb703;
+    --cheap:#3fb37f;
+    --mid:#f2b705;
+    --pricey:#e0563f;
+    --text:#e7edf3;
+    --text-dim:#9fb0c3;
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--ink);color:var(--text);overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  /* ---- Header ---- */
+  header{
+    padding:14px 20px 12px;
+    background:linear-gradient(180deg, var(--panel) 0%, var(--ink) 100%);
+    border-bottom:1px solid var(--line);
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;
+    z-index:1000;position:relative;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;}
+  .brand h1{
+    font-family:'Georgia',serif;
+    font-size:20px;font-weight:700;margin:0;letter-spacing:0.2px;color:var(--text);
+  }
+  .brand h1 .pump{color:var(--accent);}
+  .brand .sub{font-size:11.5px;color:var(--text-dim);margin-top:2px;}
+  .stat-strip{display:flex;gap:18px;font-size:12px;color:var(--text-dim);}
+  .stat-strip b{color:var(--text);font-size:15px;display:block;font-weight:600;}
+  .stat-strip .stat{text-align:right;min-width:74px;}
+  .stat-strip .stat.cheap b{color:var(--cheap);}
+  .stat-strip .stat.pricey b{color:var(--pricey);}
+
+  /* ---- Layout ---- */
+  #main{flex:1;display:flex;min-height:0;}
+  #sidebar{
+    width:280px;flex-shrink:0;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    padding:16px;overflow-y:auto;
+    display:flex;flex-direction:column;gap:18px;
+  }
+  #map{flex:1;background:#0a1420;}
+
+  .field label{
+    display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;
+    color:var(--text-dim);margin-bottom:7px;font-weight:600;
+  }
+  .fuel-toggle{display:flex;gap:6px;}
+  .fuel-toggle button{
+    flex:1;padding:9px 4px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text-dim);font-size:12.5px;font-weight:600;
+    cursor:pointer;transition:all .15s ease;
+  }
+  .fuel-toggle button.active{
+    background:var(--accent);color:#241a02;border-color:var(--accent);
+  }
+  .fuel-toggle button:hover:not(.active){background:#223a56;color:var(--text);}
+
+  select, input[type=text]{
+    width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text);font-size:13px;
+  }
+  select:focus, input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+
+  .legend{
+    display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--text-dim);
+  }
+  .legend-bar{
+    height:8px;border-radius:4px;
+    background:linear-gradient(90deg, var(--cheap), var(--mid), var(--pricey));
+  }
+  .legend-labels{display:flex;justify-content:space-between;}
+
+  #count-line{font-size:12px;color:var(--text-dim);border-top:1px solid var(--line);padding-top:14px;}
+  #count-line b{color:var(--text);}
+
+  .region-list{font-size:11.5px;color:var(--text-dim);}
+
+  footer{
+    padding:6px 20px;font-size:10.5px;color:var(--text-dim);
+    border-top:1px solid var(--line);background:var(--panel);
+    display:flex;justify-content:space-between;
+  }
+
+  /* Leaflet overrides */
+  .leaflet-popup-content-wrapper{
+    background:var(--panel-2);color:var(--text);border-radius:10px;
+  }
+  .leaflet-popup-tip{background:var(--panel-2);}
+  .leaflet-popup-content{margin:12px 14px;font-family:inherit;}
+  .pop-name{font-weight:700;font-size:13.5px;margin-bottom:2px;}
+  .pop-banniere{color:var(--accent);font-size:11.5px;font-weight:600;margin-bottom:6px;}
+  .pop-addr{font-size:11.5px;color:var(--text-dim);margin-bottom:8px;}
+  .pop-prices{display:flex;gap:10px;font-size:11.5px;}
+  .pop-prices div{background:rgba(255,255,255,0.06);padding:5px 8px;border-radius:6px;text-align:center;flex:1;}
+  .pop-prices span{display:block;color:var(--text-dim);font-size:9.5px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;}
+  .pop-prices b{font-size:13px;}
+
+  .marker-dot{
+    border-radius:50%;border:1.5px solid rgba(255,255,255,0.55);
+    box-shadow:0 0 0 2px rgba(0,0,0,0.25);
+  }
+  .marker-cluster-custom{
+    background:var(--panel-2);border:2px solid var(--accent);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--text);font-weight:700;font-size:12px;
+  }
+
+  @media (max-width:720px){
+    #sidebar{position:absolute;left:0;top:0;bottom:0;z-index:1200;transform:translateX(-100%);transition:transform .2s ease;box-shadow:8px 0 24px rgba(0,0,0,.4);}
+    #sidebar.open{transform:translateX(0);}
+    #menu-btn{display:flex;}
+    header{padding:12px 14px;}
+    .stat-strip{display:none;}
+  }
+  #menu-btn{
+    display:none;align-items:center;justify-content:center;
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text);cursor:pointer;font-size:16px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="menu-btn" aria-label="Filtres">☰</button>
+      <div class="brand">
+        <h1><span class="pump">⛽</span> Prix du carburant — Québec</h1>
+        <div class="sub" id="header-sub">chargement…</div>
+      </div>
+    </div>
+    <div class="stat-strip" id="stat-strip"></div>
+  </header>
+
+  <div id="main">
+    <aside id="sidebar">
+      <div class="field">
+        <label>Type de carburant</label>
+        <div class="fuel-toggle" id="fuel-toggle">
+          <button data-fuel="reg" class="active">Régulier</button>
+          <button data-fuel="sup">Super</button>
+          <button data-fuel="dies">Diesel</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Région administrative</label>
+        <select id="region-select"><option value="">Toutes les régions</option></select>
+      </div>
+
+      <div class="field">
+        <label>Bannière</label>
+        <select id="banner-select"><option value="">Toutes les bannières</option></select>
+      </div>
+
+      <div class="field">
+        <label>Recherche (nom, ville, adresse)</label>
+        <input type="text" id="search-input" placeholder="ex. Rouyn-Noranda">
+      </div>
+
+      <div class="field">
+        <label>Échelle de prix (¢/L, filtre courant)</label>
+        <div class="legend">
+          <div class="legend-bar"></div>
+          <div class="legend-labels" id="legend-labels">
+            <span>—</span><span>—</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="count-line">Affichage de <b id="count-shown">0</b> stations sur <b id="count-total">0</b></div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <footer>
+    <span>Source : fichier fourni par l'utilisateur (Régie de l'énergie — relevé des prix)</span>
+    <span id="footer-updated"></span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script>
+let STATIONS = [];
+let lastUpdated = null;
+
+async function loadStations() {
+  try {
+    const res = await fetch('stations.json', {cache: 'no-store'});
+    const data = await res.json();
+    STATIONS = data.stations || data; // compat ancien format
+    lastUpdated = data.generated_at || null;
+  } catch (e) {
+    console.error('Erreur de chargement de stations.json', e);
+    document.getElementById('header-sub').textContent = 'Erreur de chargement des données';
+  }
+}
+
+const FUEL_LABELS = {reg:'Régulier', sup:'Super', dies:'Diesel'};
+let currentFuel = 'reg';
+let currentRegion = '';
+let currentBanner = '';
+let currentSearch = '';
+
+const regionSel = document.getElementById('region-select');
+const bannerSel = document.getElementById('banner-select');
+
+function populateSelects() {
+  const regions = [...new Set(STATIONS.map(s=>s.r).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  regions.forEach(r=>{
+    const o = document.createElement('option'); o.value=r; o.textContent=r; regionSel.appendChild(o);
+  });
+
+  const bannerCounts = {};
+  STATIONS.forEach(s=>{ if(s.b) bannerCounts[s.b]=(bannerCounts[s.b]||0)+1; });
+  const banners = Object.keys(bannerCounts).sort((a,b)=>bannerCounts[b]-bannerCounts[a]);
+  banners.forEach(b=>{
+    const o = document.createElement('option'); o.value=b; o.textContent=`${b} (${bannerCounts[b]})`; bannerSel.appendChild(o);
+  });
+}
+
+// map init
+const map = L.map('map', {preferCanvas:true, zoomControl:true}).setView([50.5, -68], 5);
+
+const voyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20, subdomains:'abcd'
+});
+const positron = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20, subdomains:'abcd'
+});
+const dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20, subdomains:'abcd'
+});
+const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution:'Tiles &copy; Esri', maxZoom:19
+});
+
+voyager.addTo(map);
+L.control.layers({
+  'Rues (detaille)': voyager,
+  'Clair': positron,
+  'Sombre': dark,
+  'Satellite': satellite
+}, null, {position:'topright', collapsed:true}).addTo(map);
+
+let clusterGroup = L.markerClusterGroup({
+  maxClusterRadius:55,
+  iconCreateFunction: function(cluster){
+    const count = cluster.getChildCount();
+    let size = 34;
+    if(count>50) size=48; else if(count>15) size=42;
+    return L.divIcon({
+      html:`<div class="marker-cluster-custom" style="width:${size}px;height:${size}px;">${count}</div>`,
+      className:'', iconSize:[size,size]
+    });
+  }
+});
+map.addLayer(clusterGroup);
+
+function colorForPrice(p, min, max){
+  if(p==null) return '#666';
+  if(max<=min) return '#f2b705';
+  const t = Math.max(0, Math.min(1, (p-min)/(max-min)));
+  // green -> yellow -> red
+  const stops = [
+    [0.00,[63,179,127]],
+    [0.5,[242,183,5]],
+    [1.0,[224,86,63]]
+  ];
+  let c0=stops[0], c1=stops[stops.length-1];
+  for(let i=0;i<stops.length-1;i++){
+    if(t>=stops[i][0] && t<=stops[i+1][0]){ c0=stops[i]; c1=stops[i+1]; break; }
+  }
+  const localT = (t-c0[0])/(c1[0]-c0[0]||1);
+  const r = Math.round(c0[1][0] + (c1[1][0]-c0[1][0])*localT);
+  const g = Math.round(c0[1][1] + (c1[1][1]-c0[1][1])*localT);
+  const b = Math.round(c0[1][2] + (c1[1][2]-c0[1][2])*localT);
+  return `rgb(${r},${g},${b})`;
+}
+
+function fmtPrice(p){ return p==null ? 's.o.' : p.toFixed(1)+'¢'; }
+
+function getFiltered(){
+  const search = currentSearch.trim().toLowerCase();
+  return STATIONS.filter(s=>{
+    if(currentRegion && s.r!==currentRegion) return false;
+    if(currentBanner && s.b!==currentBanner) return false;
+    if(s[currentFuel]==null) return false;
+    if(search){
+      const hay = `${s.n} ${s.a} ${s.b} ${s.r}`.toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  const filtered = getFiltered();
+  const prices = filtered.map(s=>s[currentFuel]).filter(p=>p!=null);
+  const min = prices.length? Math.min(...prices) : 0;
+  const max = prices.length? Math.max(...prices) : 0;
+  const avg = prices.length? prices.reduce((a,b)=>a+b,0)/prices.length : 0;
+
+  document.getElementById('legend-labels').innerHTML =
+    `<span>${min.toFixed(1)}¢</span><span>${max.toFixed(1)}¢</span>`;
+  document.getElementById('count-shown').textContent = filtered.length.toLocaleString('fr-CA');
+  document.getElementById('header-sub').textContent =
+    `${FUEL_LABELS[currentFuel]} · ${filtered.length.toLocaleString('fr-CA')} stations affichées`;
+
+  document.getElementById('stat-strip').innerHTML = `
+    <div class="stat cheap"><b>${min? min.toFixed(1)+'¢':'—'}</b>plus bas</div>
+    <div class="stat"><b>${avg? avg.toFixed(1)+'¢':'—'}</b>moyenne</div>
+    <div class="stat pricey"><b>${max? max.toFixed(1)+'¢':'—'}</b>plus haut</div>
+  `;
+
+  clusterGroup.clearLayers();
+  const markers = filtered.map(s=>{
+    const p = s[currentFuel];
+    const color = colorForPrice(p, min, max);
+    const marker = L.circleMarker([s.lat, s.lng], {
+      radius:7, fillColor:color, color:'rgba(255,255,255,0.6)',
+      weight:1.2, fillOpacity:0.92
+    });
+    marker.bindPopup(`
+      <div class="pop-name">${escapeHtml(s.n)}</div>
+      <div class="pop-banniere">${escapeHtml(s.b||'—')}</div>
+      <div class="pop-addr">${escapeHtml(s.a||'')}${s.r? ' · '+escapeHtml(s.r):''}</div>
+      <div class="pop-prices">
+        <div><span>Régulier</span><b>${fmtPrice(s.reg)}</b></div>
+        <div><span>Super</span><b>${fmtPrice(s.sup)}</b></div>
+        <div><span>Diesel</span><b>${fmtPrice(s.dies)}</b></div>
+      </div>
+    `);
+    return marker;
+  });
+  clusterGroup.addLayers(markers);
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// events
+document.getElementById('fuel-toggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  document.querySelectorAll('#fuel-toggle button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentFuel = btn.dataset.fuel;
+  render();
+});
+regionSel.addEventListener('change', e=>{ currentRegion = e.target.value; render(); });
+bannerSel.addEventListener('change', e=>{ currentBanner = e.target.value; render(); });
+let searchTimer;
+document.getElementById('search-input').addEventListener('input', e=>{
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(()=>{ currentSearch = e.target.value; render(); }, 200);
+});
+
+document.getElementById('menu-btn').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+async function init() {
+  document.getElementById('header-sub').textContent = 'Chargement des données…';
+  await loadStations();
+  document.getElementById('count-total').textContent = STATIONS.length.toLocaleString('fr-CA');
+  populateSelects();
+  if (lastUpdated) {
+    const d = new Date(lastUpdated);
+    document.getElementById('footer-updated').textContent =
+      'Données mises à jour le ' + d.toLocaleDateString('fr-CA', {year:'numeric', month:'long', day:'numeric'}) +
+      ' à ' + d.toLocaleTimeString('fr-CA', {hour:'2-digit', minute:'2-digit'});
+  } else {
+    document.getElementById('footer-updated').textContent = '';
+  }
+  render();
+}
+
+init();
+</script>
+</body>
+</html>

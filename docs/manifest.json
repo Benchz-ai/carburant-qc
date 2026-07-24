@@ -1,0 +1,16 @@
+{
+  "name": "Prix du carburant — Québec",
+  "short_name": "Carburant QC",
+  "description": "Carte interactive des prix de l'essence, du super et du diesel au Québec, mise à jour quotidiennement.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1b2b",
+  "theme_color": "#0f1b2b",
+  "lang": "fr-CA",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
