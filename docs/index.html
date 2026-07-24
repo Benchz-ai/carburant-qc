@@ -100,6 +100,27 @@
   #count-line{font-size:12px;color:var(--text-dim);border-top:1px solid var(--line);padding-top:14px;}
   #count-line b{color:var(--text);}
 
+  .cheapest-list{display:flex;flex-direction:column;gap:6px;}
+  .cheapest-item{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 9px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-2);cursor:pointer;transition:background .12s ease;
+    text-align:left;width:100%;
+  }
+  .cheapest-item:hover{background:#223a56;}
+  .cheapest-rank{
+    flex-shrink:0;width:20px;height:20px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10.5px;font-weight:700;background:var(--cheap);color:#052414;
+  }
+  .cheapest-item:nth-child(1) .cheapest-rank{background:#ffd60a;color:#3a2a00;}
+  .cheapest-item:nth-child(2) .cheapest-rank{background:#c9d6df;color:#20313b;}
+  .cheapest-item:nth-child(3) .cheapest-rank{background:#cd8a54;color:#2e1a08;}
+  .cheapest-info{flex:1;min-width:0;}
+  .cheapest-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cheapest-place{font-size:10.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cheapest-price{flex-shrink:0;font-size:13px;font-weight:700;color:var(--cheap);}
+
   .region-list{font-size:11.5px;color:var(--text-dim);}
 
   footer{
@@ -132,17 +153,19 @@
     color:var(--text);font-weight:700;font-size:12px;
   }
 
+  #menu-btn{
+    display:none;align-items:center;justify-content:center;
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text);cursor:pointer;font-size:16px;
+  }
+
   @media (max-width:720px){
+    #main{position:relative;}
     #sidebar{position:absolute;left:0;top:0;bottom:0;z-index:1200;transform:translateX(-100%);transition:transform .2s ease;box-shadow:8px 0 24px rgba(0,0,0,.4);}
     #sidebar.open{transform:translateX(0);}
     #menu-btn{display:flex;}
     header{padding:12px 14px;}
     .stat-strip{display:none;}
-  }
-  #menu-btn{
-    display:none;align-items:center;justify-content:center;
-    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
-    background:var(--panel-2);color:var(--text);cursor:pointer;font-size:16px;
   }
 </style>
 </head>
@@ -195,6 +218,11 @@
         </div>
       </div>
 
+      <div class="field">
+        <label>Les 10 moins chères (filtre courant)</label>
+        <div class="cheapest-list" id="cheapest-list"></div>
+      </div>
+
       <div id="count-line">Affichage de <b id="count-shown">0</b> stations sur <b id="count-total">0</b></div>
     </aside>
 
@@ -227,6 +255,7 @@ async function loadStations() {
 
 const FUEL_LABELS = {reg:'Régulier', sup:'Super', dies:'Diesel'};
 let currentFuel = 'reg';
+let markerByStation = new Map();
 let currentRegion = '';
 let currentBanner = '';
 let currentSearch = '';
@@ -307,6 +336,14 @@ function colorForPrice(p, min, max){
   return `rgb(${r},${g},${b})`;
 }
 
+function radiusForPrice(p, min, max){
+  if(p==null) return 6;
+  if(max<=min) return 8;
+  const t = Math.max(0, Math.min(1, (p-min)/(max-min)));
+  // moins cher (t proche de 0) -> plus gros point ; plus cher -> plus petit
+  return 12 - t*6; // de 12px (le moins cher) à 6px (le plus cher)
+}
+
 function fmtPrice(p){ return p==null ? 's.o.' : p.toFixed(1)+'¢'; }
 
 function getFiltered(){
@@ -343,11 +380,13 @@ function render(){
   `;
 
   clusterGroup.clearLayers();
+  markerByStation = new Map();
   const markers = filtered.map(s=>{
     const p = s[currentFuel];
     const color = colorForPrice(p, min, max);
+    const radius = radiusForPrice(p, min, max);
     const marker = L.circleMarker([s.lat, s.lng], {
-      radius:7, fillColor:color, color:'rgba(255,255,255,0.6)',
+      radius:radius, fillColor:color, color:'rgba(255,255,255,0.6)',
       weight:1.2, fillOpacity:0.92
     });
     marker.bindPopup(`
@@ -360,9 +399,49 @@ function render(){
         <div><span>Diesel</span><b>${fmtPrice(s.dies)}</b></div>
       </div>
     `);
+    markerByStation.set(s, marker);
     return marker;
   });
   clusterGroup.addLayers(markers);
+  renderCheapestList(filtered);
+}
+
+function renderCheapestList(filtered){
+  const withPrice = filtered.filter(s=>s[currentFuel]!=null);
+  const top10 = [...withPrice].sort((a,b)=>a[currentFuel]-b[currentFuel]).slice(0,10);
+  const list = document.getElementById('cheapest-list');
+  if(!top10.length){
+    list.innerHTML = `<div style="font-size:11.5px;color:var(--text-dim);">Aucune station pour ce filtre.</div>`;
+    return;
+  }
+  list.innerHTML = top10.map((s,i)=>`
+    <button class="cheapest-item" data-idx="${i}">
+      <div class="cheapest-rank">${i+1}</div>
+      <div class="cheapest-info">
+        <div class="cheapest-name">${escapeHtml(s.n)}</div>
+        <div class="cheapest-place">${escapeHtml(s.b||'—')} · ${escapeHtml((s.a||'').split(',').pop().trim())}</div>
+      </div>
+      <div class="cheapest-price">${fmtPrice(s[currentFuel])}</div>
+    </button>
+  `).join('');
+  list.querySelectorAll('.cheapest-item').forEach((btn,i)=>{
+    btn.addEventListener('click', ()=>{
+      const s = top10[i];
+      const marker = markerByStation.get(s);
+      map.setView([s.lat, s.lng], 14, {animate:true});
+      if(marker){
+        // laisse le temps au cluster de se désagréger avant d'ouvrir la popup
+        setTimeout(()=>{
+          if(clusterGroup.hasLayer(marker)){
+            clusterGroup.zoomToShowLayer(marker, ()=> marker.openPopup());
+          } else {
+            marker.openPopup();
+          }
+        }, 300);
+      }
+      if(window.innerWidth<=720) document.getElementById('sidebar').classList.remove('open');
+    });
+  });
 }
 
 function escapeHtml(str){
