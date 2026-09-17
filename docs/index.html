@@ -66,6 +66,10 @@
     display:flex;flex-direction:column;gap:18px;
   }
   #map{flex:1;background:#0a1420;}
+  #map.dark-tiles .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);}
+  #map.dark-tiles .leaflet-marker-pane,
+  #map.dark-tiles .leaflet-popup-pane,
+  #map.dark-tiles .leaflet-control{filter:none;}
 
   .field label{
     display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;
@@ -280,26 +284,29 @@ function populateSelects() {
 // map init
 const map = L.map('map', {preferCanvas:true, zoomControl:true}).setView([50.5, -68], 5);
 
-const voyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20, subdomains:'abcd'
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors', maxZoom:19, subdomains:'abc'
 });
-const positron = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20, subdomains:'abcd'
-});
-const dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20, subdomains:'abcd'
+const osmDark = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors', maxZoom:19, subdomains:'abc'
 });
 const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution:'Tiles &copy; Esri', maxZoom:19
 });
 
-voyager.addTo(map);
+osm.addTo(map);
 L.control.layers({
-  'Rues (detaille)': voyager,
-  'Clair': positron,
-  'Sombre': dark,
+  'Rues (détaillé)': osm,
+  'Sombre': osmDark,
   'Satellite': satellite
 }, null, {position:'topright', collapsed:true}).addTo(map);
+
+// Mode sombre pseudo — un filtre CSS sur les mêmes tuiles OSM plutôt
+// qu'un fournisseur de tuiles tiers séparé (évite toute dépendance qui
+// pourrait un jour exiger une clé API elle aussi, comme CARTO).
+map.on('baselayerchange', function(e){
+  document.getElementById('map').classList.toggle('dark-tiles', e.layer === osmDark);
+});
 
 let clusterGroup = L.markerClusterGroup({
   maxClusterRadius:55,
